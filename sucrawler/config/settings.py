@@ -50,15 +50,57 @@ class UserAgentConfig(BaseModel):
     rotate: bool = True
 
 
+class RetryMiddlewareConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = True
+    max_attempts: int = 3
+    backoff_factor: float = 2.0
+
+
+class RateLimitMiddlewareConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = True
+    requests_per_second: float = 10.0
+
+
+class UserAgentMiddlewareConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = True
+    rotate: bool = True
+
+
+class ProxyMiddlewareConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = False
+    proxy_list: list[str] = []
+
+
+class LogMiddlewareConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = True
+    level: str = "INFO"
+
+
+class StatsMiddlewareConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = True
+
+
 class MiddlewareConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    retry: bool = True
-    rate_limit: bool = True
-    user_agent: bool = True
-    proxy: bool = False
-    log: bool = True
-    stats: bool = True
+    retry: RetryMiddlewareConfig = Field(default_factory=RetryMiddlewareConfig)
+    rate_limit: RateLimitMiddlewareConfig = Field(default_factory=RateLimitMiddlewareConfig)
+    user_agent: UserAgentMiddlewareConfig = Field(default_factory=UserAgentMiddlewareConfig)
+    proxy: ProxyMiddlewareConfig = Field(default_factory=ProxyMiddlewareConfig)
+    log: LogMiddlewareConfig = Field(default_factory=LogMiddlewareConfig)
+    stats: StatsMiddlewareConfig = Field(default_factory=StatsMiddlewareConfig)
 
 
 class StorageBackendConfig(BaseModel):
@@ -81,6 +123,60 @@ class S3StorageBackendConfig(StorageBackendConfig):
     secret_key: str = ""
 
 
+class JsonStorageBackendConfig(StorageBackendConfig):
+    type: Literal["json"] = "json"
+    file_path: str = "./data/items.json"
+
+
+class CsvStorageBackendConfig(StorageBackendConfig):
+    type: Literal["csv"] = "csv"
+    file_path: str = "./data/items.csv"
+
+
+class SqliteStorageBackendConfig(StorageBackendConfig):
+    type: Literal["sqlite"] = "sqlite"
+    db_path: str = "./data/sucrawler.db"
+
+
+class MysqlStorageBackendConfig(StorageBackendConfig):
+    type: Literal["mysql"] = "mysql"
+    host: str = "localhost"
+    port: int = 3306
+    database: str = "sucrawler"
+    user: str = "root"
+    password: str = ""
+
+
+class PostgresStorageBackendConfig(StorageBackendConfig):
+    type: Literal["postgres"] = "postgres"
+    host: str = "localhost"
+    port: int = 5432
+    database: str = "sucrawler"
+    user: str = "postgres"
+    password: str = ""
+
+
+class MongodbStorageBackendConfig(StorageBackendConfig):
+    type: Literal["mongodb"] = "mongodb"
+    uri: str = "mongodb://localhost:27017"
+    database: str = "sucrawler"
+    collection: str = "items"
+
+
+class RedisStorageBackendConfig(StorageBackendConfig):
+    type: Literal["redis"] = "redis"
+    host: str = "localhost"
+    port: int = 6379
+    db: int = 0
+    password: str = ""
+
+
+class EsStorageBackendConfig(StorageBackendConfig):
+    type: Literal["es", "elasticsearch"] = "elasticsearch"
+    hosts: list[str] = ["http://localhost:9200"]
+    index: str = "sucrawler"
+
+
 def get_storage_backend_discriminator(v: object) -> str:
     if isinstance(v, dict):
         type_val = v.get("type", "local")
@@ -92,7 +188,16 @@ def get_storage_backend_discriminator(v: object) -> str:
 
 StorageBackend = Annotated[
     Annotated[LocalStorageBackendConfig, Tag("local")]
-    | Annotated[S3StorageBackendConfig, Tag("s3")],
+    | Annotated[S3StorageBackendConfig, Tag("s3")]
+    | Annotated[JsonStorageBackendConfig, Tag("json")]
+    | Annotated[CsvStorageBackendConfig, Tag("csv")]
+    | Annotated[SqliteStorageBackendConfig, Tag("sqlite")]
+    | Annotated[MysqlStorageBackendConfig, Tag("mysql")]
+    | Annotated[PostgresStorageBackendConfig, Tag("postgres")]
+    | Annotated[MongodbStorageBackendConfig, Tag("mongodb")]
+    | Annotated[RedisStorageBackendConfig, Tag("redis")]
+    | Annotated[EsStorageBackendConfig, Tag("elasticsearch")]
+    | Annotated[EsStorageBackendConfig, Tag("es")],
     Discriminator(get_storage_backend_discriminator),
 ]
 
