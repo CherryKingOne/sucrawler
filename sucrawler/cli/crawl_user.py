@@ -10,6 +10,7 @@ from loguru import logger
 
 from sucrawler.config.loader import load_config
 from sucrawler.platforms.bilibili.config import BiliConfig
+from sucrawler.platforms.bilibili.spiders.browser_spider import BiliBrowserSpider
 from sucrawler.platforms.bilibili.spiders.user_spider import BiliUserSpider
 from sucrawler.platforms.xiaohongshu.config import XHSConfig
 from sucrawler.platforms.xiaohongshu.spiders.browser_spider import XHSBrowserSpider
@@ -58,7 +59,7 @@ def build_crawl_user_parser(
     parser.add_argument(
         "--cookie",
         type=str,
-        help="小红书 Cookie（也可通过环境变量 XHS_COOKIE 设置）",
+        help="Cookie（也可通过环境变量设置）",
     )
     parser.add_argument(
         "--env",
@@ -101,6 +102,7 @@ async def crawl_user(args: argparse.Namespace) -> int:
         print("示例：")
         print("  uv run sucrawler crawl-user --platform xiaohongshu --url https://www.xiaohongshu.com/user/profile/xxxxxxxx")
         print("  uv run sucrawler crawl-user --platform bilibili --url https://space.bilibili.com/xxxxxxx")
+        print("  uv run sucrawler crawl-user --platform bilibili --url https://space.bilibili.com/xxxxxxx --browser")
         print("  uv run sucrawler crawl-user --user-id xxxxxxxx")
         print("  uv run sucrawler crawl-user --user-id xxxxxxxx --browser")
         print("  uv run sucrawler crawl-user --user-id xxxxxxxx --browser --connect-existing")
@@ -155,9 +157,24 @@ async def crawl_user(args: argparse.Namespace) -> int:
         bili_config = BiliConfig()
         if args.cookie:
             bili_config.cookie = args.cookie
-        if not bili_config.cookie:
+
+        if args.browser:
+            bili_config.use_browser = True
+            browser_updates = {"enabled": True, "mode": "cdp", "headless": args.headless}
+            if args.connect_existing:
+                browser_updates["cdp_connect_existing"] = True
+                browser_updates["debug_port"] = args.debug_port
+            bili_config.browser = bili_config.browser.model_copy(update=browser_updates)
+
+        if not bili_config.use_browser and not bili_config.cookie:
             logger.warning("未设置 Cookie，部分接口可能无法正常访问")
-        spider = BiliUserSpider(bili_config)
+            logger.info("提示：可使用 --browser 参数启用浏览器模式，直接登录后爬取")
+
+        if bili_config.use_browser:
+            spider = BiliBrowserSpider(bili_config)
+            logger.info("使用浏览器 (CDP) 模式爬取")
+        else:
+            spider = BiliUserSpider(bili_config)
     else:
         xhs_config = XHSConfig()
         if args.cookie:
