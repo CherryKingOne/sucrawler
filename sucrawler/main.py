@@ -43,6 +43,10 @@ def main() -> None:
     crawl_user_parser.add_argument("--max-notes", "-n", type=int, default=20, help="爬取笔记数量上限")
     crawl_user_parser.add_argument("--output", "-o", type=str, help="输出文件路径 (JSON)")
     crawl_user_parser.add_argument("--cookie", type=str, help="Cookie")
+    crawl_user_parser.add_argument("--browser", action="store_true", default=False, help="使用浏览器模式 (CDP) 爬取")
+    crawl_user_parser.add_argument("--headless", action="store_true", default=False, help="浏览器无头模式")
+    crawl_user_parser.add_argument("--connect-existing", action="store_true", default=False, help="连接已有浏览器")
+    crawl_user_parser.add_argument("--debug-port", type=int, default=9222, help="已有浏览器调试端口")
 
     subparsers.add_parser("init-db", help="初始化数据库")
     subparsers.add_parser("list-platforms", help="列出支持的平台")

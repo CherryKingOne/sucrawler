@@ -7,9 +7,15 @@ from loguru import logger
 
 
 class RequestCapture:
-    def __init__(self, page: Any, url_pattern: str = "") -> None:
+    def __init__(
+        self,
+        page: Any,
+        url_pattern: str = "",
+        capture_body: bool = True,
+    ) -> None:
         self._page = page
         self._url_pattern = url_pattern
+        self._capture_body = capture_body
         self._captured_requests: list[dict[str, Any]] = []
         self._captured_responses: list[dict[str, Any]] = []
         self._lock = asyncio.Lock()
@@ -119,18 +125,28 @@ class RequestCapture:
         if self._url_pattern and not re.search(self._url_pattern, url):
             return
 
-        async with self._lock:
-            try:
+        try:
+            body = None
+            if self._capture_body and response.status == 200:
+                try:
+                    content_type = response.headers.get("content-type", "")
+                    if "application/json" in content_type or "text/" in content_type:
+                        body = await response.text()
+                except Exception:
+                    pass
+
+            async with self._lock:
                 data = {
                     "url": url,
                     "status": response.status,
                     "headers": dict(response.headers),
+                    "body": body,
                     "timestamp": asyncio.get_event_loop().time(),
                 }
                 self._captured_responses.append(data)
                 logger.debug(f"[RequestCapture] Response: {response.status} {url}")
-            except Exception as e:
-                logger.debug(f"[RequestCapture] Error capturing response: {e}")
+        except Exception as e:
+            logger.debug(f"[RequestCapture] Error capturing response: {e}")
 
     async def __aenter__(self) -> "RequestCapture":
         await self.start()
