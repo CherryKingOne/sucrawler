@@ -85,9 +85,9 @@ class BiliBrowserSpider:
                         cookies = await page.context.cookies()
                         for cookie in cookies:
                             if cookie.get("name") == "SESSDATA":
-                            logger.info("Login successful (redirected away from login page)")
-                            self._login_checked = True
-                            return True
+                                logger.info("Login successful (redirected away from login page)")
+                                self._login_checked = True
+                                return True
                 except Exception:
                     pass
 

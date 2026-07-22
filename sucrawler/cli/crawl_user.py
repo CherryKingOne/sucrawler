@@ -72,13 +72,19 @@ def build_crawl_user_parser(
         "--browser",
         action="store_true",
         default=False,
-        help="使用浏览器模式 (CDP) 爬取，反检测能力更强",
+        help="使用浏览器模式 (CDP) 爬取，反检测能力更强（Bilibili 默认启用）",
+    )
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        default=False,
+        help="禁用浏览器模式（仅 Bilibili 有效，默认启用浏览器模式）",
     )
     parser.add_argument(
         "--headless",
         action="store_true",
         default=False,
-        help="浏览器无头模式（不显示窗口），仅在 --browser 模式下有效",
+        help="浏览器无头模式（不显示窗口），仅在浏览器模式下有效",
     )
     parser.add_argument(
         "--connect-existing",
@@ -100,12 +106,14 @@ async def crawl_user(args: argparse.Namespace) -> int:
         print("错误：必须提供 --url 或 --user-id 其中之一")
         print()
         print("示例：")
+        print("  # 小红书博主爬取")
         print("  uv run sucrawler crawl-user --platform xiaohongshu --url https://www.xiaohongshu.com/user/profile/xxxxxxxx")
-        print("  uv run sucrawler crawl-user --platform bilibili --url https://space.bilibili.com/xxxxxxx")
-        print("  uv run sucrawler crawl-user --platform bilibili --url https://space.bilibili.com/xxxxxxx --browser")
-        print("  uv run sucrawler crawl-user --user-id xxxxxxxx")
         print("  uv run sucrawler crawl-user --user-id xxxxxxxx --browser")
-        print("  uv run sucrawler crawl-user --user-id xxxxxxxx --browser --connect-existing")
+        print()
+        print("  # Bilibili UP 主爬取（默认浏览器模式，无需 --browser）")
+        print("  uv run sucrawler crawl-user --platform bilibili --url https://space.bilibili.com/xxxxxxx")
+        print("  uv run sucrawler crawl-user --platform bilibili --user-id xxxxxxxx")
+        print("  uv run sucrawler crawl-user --platform bilibili --user-id xxxxxxxx --connect-existing")
         return 1
 
     user_id = args.user_id
@@ -158,7 +166,11 @@ async def crawl_user(args: argparse.Namespace) -> int:
         if args.cookie:
             bili_config.cookie = args.cookie
 
-        if args.browser:
+        use_browser = True
+        if args.no_browser:
+            use_browser = False
+
+        if use_browser:
             bili_config.use_browser = True
             browser_updates = {"enabled": True, "mode": "cdp", "headless": args.headless}
             if args.connect_existing:
@@ -168,7 +180,7 @@ async def crawl_user(args: argparse.Namespace) -> int:
 
         if not bili_config.use_browser and not bili_config.cookie:
             logger.warning("未设置 Cookie，部分接口可能无法正常访问")
-            logger.info("提示：可使用 --browser 参数启用浏览器模式，直接登录后爬取")
+            logger.info("提示：Bilibili 默认使用浏览器模式，可使用 --no-browser 关闭")
 
         if bili_config.use_browser:
             spider = BiliBrowserSpider(bili_config)
