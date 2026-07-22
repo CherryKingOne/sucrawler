@@ -12,6 +12,7 @@ from loguru import logger
 
 from sucrawler.config.loader import load_config
 from sucrawler.platforms.bilibili.config import BiliConfig
+from sucrawler.services.media_downloader import download_media
 from sucrawler.platforms.bilibili.spiders.browser_spider import BiliBrowserSpider
 from sucrawler.platforms.bilibili.spiders.user_spider import BiliUserSpider
 from sucrawler.platforms.xiaohongshu.config import XHSConfig
@@ -255,6 +256,17 @@ async def crawl_user(args: argparse.Namespace) -> int:
                 print(f"  - JSON 和 CSV 两种格式")
             except Exception as e:
                 logger.error(f"保存结果失败: {e}")
+                output_dir = None
+
+        # 后台下载视频和封面图片
+        if output_dir and items:
+            try:
+                print("-" * 50)
+                print(f"开始下载视频和封面图片到: {output_dir}/video 和 {output_dir}/image")
+                await download_media(items, output_dir, platform)
+                print(f"媒体文件下载完成")
+            except Exception as e:
+                logger.error(f"媒体下载失败: {e}")
 
         if args.output:
             result: dict[str, Any] = {

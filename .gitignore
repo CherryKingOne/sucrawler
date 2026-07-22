@@ -56,4 +56,4 @@ data/
 .DS_Store
 Thumbs.db
 
-output/
+output
