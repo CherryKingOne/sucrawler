@@ -52,6 +52,7 @@ from sucrawler.utils.time import (
     timestamp_now_ms,
     timestamp_to_datetime,
 )
+from sucrawler.utils.url_parser import extract_user_id_from_url
 
 __all__ = [
     "build_url",
@@ -98,4 +99,5 @@ __all__ = [
     "dir_exists",
     "get_temp_dir",
     "get_temp_file",
+    "extract_user_id_from_url",
 ]

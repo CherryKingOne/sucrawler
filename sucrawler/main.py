@@ -58,7 +58,7 @@ def main() -> None:
     elif args.command == "serve":
         _cmd_serve(args)
     elif args.command == "crawl-user":
-        _cmd_crawl_user(args)
+        asyncio.run(_cmd_crawl_user(args))
     elif args.command == "init-db":
         _cmd_init_db(args)
     elif args.command == "list-platforms":
@@ -68,19 +68,14 @@ def main() -> None:
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
-    from scripts.run_spider import main as run_spider_main
-
-    sys.argv = [
-        "run_spider.py",
-        "--platform", args.platform,
-        "--env", args.env,
-    ]
+    print("Starting crawler...")
+    print(f"Environment: {args.env}")
+    print("Platform: {args.platform}".format(platform=args.platform))
     if args.url:
-        sys.argv.extend(["--url", args.url])
+        print(f"URL: {args.url}")
     if args.keyword:
-        sys.argv.extend(["--keyword", args.keyword])
-
-    asyncio.run(run_spider_main())
+        print(f"Keyword: {args.keyword}")
+    print("使用 scripts/run_spider.py 进行详细的爬虫控制")
 
 
 def _cmd_serve(args: argparse.Namespace) -> None:
@@ -94,25 +89,11 @@ def _cmd_serve(args: argparse.Namespace) -> None:
     )
 
 
-def _cmd_crawl_user(args: argparse.Namespace) -> None:
-    from scripts.crawl_user import main as crawl_user_main
+async def _cmd_crawl_user(args: argparse.Namespace) -> None:
+    from sucrawler.cli.crawl_user import crawl_user
 
-    sys.argv = ["crawl_user.py"]
-    if args.platform:
-        sys.argv.extend(["--platform", args.platform])
-    if args.url:
-        sys.argv.extend(["--url", args.url])
-    if args.user_id:
-        sys.argv.extend(["--user-id", args.user_id])
-    if args.max_notes:
-        sys.argv.extend(["--max-notes", str(args.max_notes)])
-    if args.output:
-        sys.argv.extend(["--output", args.output])
-    if args.cookie:
-        sys.argv.extend(["--cookie", args.cookie])
-    sys.argv.extend(["--env", args.env])
-
-    asyncio.run(crawl_user_main())
+    exit_code = await crawl_user(args)
+    sys.exit(exit_code)
 
 
 def _cmd_init_db(args: argparse.Namespace) -> None:
