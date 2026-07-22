@@ -119,18 +119,25 @@ class XHSAuthenticator(BaseAuthenticator):
         check_interval = 2
         qrcode_refresh_interval = 60
         max_checks = self.timeout // check_interval
-        last_qrcode_time = 0
         checks_since_refresh = 0
+        consecutive_success = 0
+        required_consecutive = 3
 
         for i in range(max_checks):
             try:
                 user_element = await self._page.query_selector(self.LOGIN_CHECK_SELECTOR)
-                if user_element:
-                    return True
+                has_user_element = user_element is not None
 
                 cookies = await self._get_cookies()
-                if self._has_web_session(cookies):
-                    return True
+                has_web_session = self._has_web_session(cookies)
+
+                if has_user_element and has_web_session:
+                    consecutive_success += 1
+                    if consecutive_success >= required_consecutive:
+                        logger.info("Login confirmed with consecutive checks")
+                        return True
+                else:
+                    consecutive_success = 0
 
                 checks_since_refresh += 1
                 if checks_since_refresh * check_interval >= qrcode_refresh_interval:
@@ -141,7 +148,7 @@ class XHSAuthenticator(BaseAuthenticator):
                         logger.info("QR code refreshed, please scan to login")
 
             except Exception:
-                pass
+                consecutive_success = 0
 
             await asyncio.sleep(check_interval)
 

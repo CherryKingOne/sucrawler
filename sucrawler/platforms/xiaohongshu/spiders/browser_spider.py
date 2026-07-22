@@ -56,6 +56,9 @@ class XHSBrowserSpider:
         try:
             self._authenticator.attach_browser(page, bm.playwright_context)
 
+            await page.goto(self.config.base_url, wait_until="domcontentloaded")
+            await asyncio.sleep(2)
+
             if await self._authenticator.check_login_status():
                 logger.info("Already logged in")
                 self._login_checked = True
@@ -69,11 +72,35 @@ class XHSBrowserSpider:
 
             success = await self._authenticator.login()
             if success:
-                logger.info("Login successful")
-                self._login_checked = True
-                if self._authenticator.credential and bm.credential_store:
-                    bm.credential_store.save(self._authenticator.credential)
-                    logger.info("Credential saved")
+                await asyncio.sleep(3)
+                logger.info("Login successful, verifying on target page...")
+
+                verify_page = await bm.new_page()
+                try:
+                    self._authenticator.attach_browser(verify_page, bm.playwright_context)
+                    await verify_page.goto(self.config.base_url, wait_until="domcontentloaded")
+                    await asyncio.sleep(2)
+
+                    if await self._authenticator.check_login_status():
+                        logger.info("Login verified on new page")
+                        self._login_checked = True
+                        if self._authenticator.credential and bm.credential_store:
+                            bm.credential_store.save(self._authenticator.credential)
+                            logger.info("Credential saved")
+                        return True
+                    else:
+                        logger.warning("Login not verified on new page, retrying...")
+                        await asyncio.sleep(3)
+                        if await self._authenticator.check_login_status():
+                            logger.info("Login verified after retry")
+                            self._login_checked = True
+                            if self._authenticator.credential and bm.credential_store:
+                                bm.credential_store.save(self._authenticator.credential)
+                                logger.info("Credential saved")
+                            return True
+                finally:
+                    await verify_page.close()
+
                 return True
             else:
                 logger.error("Login failed")
