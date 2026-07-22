@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -97,6 +99,12 @@ def build_crawl_user_parser(
         type=int,
         default=9222,
         help="已有浏览器的调试端口 (默认: 9222)",
+    )
+    parser.add_argument(
+        "--no-save",
+        action="store_true",
+        default=False,
+        help="不保存结果到文件（默认保存到 output/ 目录）",
     )
     return parser
 
@@ -238,23 +246,31 @@ async def crawl_user(args: argparse.Namespace) -> int:
             items = await spider.crawl_user_videos(user_id, max_count=args.max_notes)
 
         print(f"成功爬取 {len(items)} 条{contents_label}")
+        print("-" * 50)
 
-        result: dict[str, Any] = {
-            "platform": platform,
-            "user_id": user_id,
-            "user_info": user_info.model_dump() if user_info else None,
-            "count": len(items),
-            "items": [item.model_dump() for item in items],
-        }
+        if not args.no_save:
+            try:
+                output_dir = save_crawl_result(platform, user_info, items)
+                print(f"结果已保存到: {output_dir}")
+                print(f"  - JSON 和 CSV 两种格式")
+            except Exception as e:
+                logger.error(f"保存结果失败: {e}")
 
         if args.output:
+            result: dict[str, Any] = {
+                "platform": platform,
+                "user_id": user_id,
+                "user_info": user_info.model_dump() if user_info else None,
+                "count": len(items),
+                "items": [item.model_dump() for item in items],
+            }
             output_path = Path(args.output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             with output_path.open("w", encoding="utf-8") as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
-            print(f"结果已保存到: {output_path}")
-        else:
-            print("-" * 50)
+            print(f"结果已另存为: {output_path}")
+
+        if args.no_save and not args.output:
             print(f"{contents_label}列表：")
             for i, item in enumerate(items[:10], 1):
                 title = getattr(item, "title", "") or getattr(item, "note_id", "") or "(无标题)"
@@ -280,3 +296,108 @@ async def crawl_user_main() -> None:
     parser = build_crawl_user_parser()
     args = parser.parse_args()
     sys.exit(await crawl_user(args))
+
+
+def _sanitize_filename(name: str) -> str:
+    name = re.sub(r'[\\/:*?"<>|]', "_", name)
+    name = name.strip()
+    return name or "unknown"
+
+
+def _get_output_dir(platform: str, user_name: str) -> Path:
+    project_root = Path.cwd()
+    safe_name = _sanitize_filename(user_name)
+    return project_root / "output" / platform / safe_name
+
+
+def _save_result_json(
+    output_dir: Path,
+    file_name: str,
+    result: dict[str, Any],
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    file_path = output_dir / f"{file_name}.json"
+    with file_path.open("w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    return file_path
+
+
+def _save_result_csv(
+    output_dir: Path,
+    file_name: str,
+    items: list[Any],
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    file_path = output_dir / f"{file_name}.csv"
+
+    if not items:
+        with file_path.open("w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.writer(f)
+            writer.writerow(["无数据"])
+        return file_path
+
+    first = items[0]
+    if hasattr(first, "model_dump"):
+        rows = [item.model_dump() for item in items]
+    elif isinstance(first, dict):
+        rows = list(items)
+    else:
+        rows = [vars(item) for item in items]
+
+    fieldnames: list[str] = []
+    for row in rows:
+        for key in row:
+            if key not in fieldnames:
+                fieldnames.append(key)
+
+    with file_path.open("w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            cleaned = {}
+            for key in fieldnames:
+                val = row.get(key, "")
+                if isinstance(val, (list, dict)):
+                    cleaned[key] = json.dumps(val, ensure_ascii=False)
+                else:
+                    cleaned[key] = val
+            writer.writerow(cleaned)
+
+    return file_path
+
+
+def save_crawl_result(
+    platform: str,
+    user_info: Any,
+    items: list[Any],
+) -> Path:
+    if user_info and hasattr(user_info, "name"):
+        user_name = user_info.name
+    elif user_info and hasattr(user_info, "nickname"):
+        user_name = user_info.nickname
+    elif user_info and isinstance(user_info, dict):
+        user_name = user_info.get("name") or user_info.get("nickname") or "unknown"
+    else:
+        user_name = "unknown"
+
+    safe_name = _sanitize_filename(str(user_name))
+    output_dir = _get_output_dir(platform, safe_name)
+
+    result: dict[str, Any] = {
+        "platform": platform,
+        "user_info": user_info.model_dump() if hasattr(user_info, "model_dump") else user_info,
+        "count": len(items),
+        "items": [
+            item.model_dump() if hasattr(item, "model_dump") else item
+            for item in items
+        ],
+    }
+
+    json_path = _save_result_json(output_dir, safe_name, result)
+    csv_path = _save_result_csv(output_dir, safe_name, items)
+
+    logger.info(f"结果已保存到: {output_dir}")
+    logger.info(f"  - JSON: {json_path}")
+    logger.info(f"  - CSV: {csv_path}")
+
+    return output_dir
