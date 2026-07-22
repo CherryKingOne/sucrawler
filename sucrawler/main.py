@@ -51,6 +51,25 @@ def main() -> None:
     subparsers.add_parser("init-db", help="初始化数据库")
     subparsers.add_parser("list-platforms", help="列出支持的平台")
 
+    auth_parser = subparsers.add_parser("auth", help="登录认证管理")
+    auth_subparsers = auth_parser.add_subparsers(dest="auth_command", help="认证子命令")
+
+    auth_login_parser = auth_subparsers.add_parser("login", help="登录指定平台")
+    auth_login_parser.add_argument("--platform", "-p", type=str, default="xiaohongshu", help="平台名称")
+    auth_login_parser.add_argument(
+        "--login-type", "-t", type=str, choices=["qrcode", "phone", "cookie"], default="qrcode", help="登录方式"
+    )
+    auth_login_parser.add_argument("--cookie", type=str, help="Cookie 字符串")
+    auth_login_parser.add_argument("--headless", action="store_true", default=False, help="浏览器无头模式")
+
+    auth_logout_parser = auth_subparsers.add_parser("logout", help="登出指定平台")
+    auth_logout_parser.add_argument("--platform", "-p", type=str, default="xiaohongshu", help="平台名称")
+
+    auth_status_parser = auth_subparsers.add_parser("status", help="查看登录状态")
+    auth_status_parser.add_argument("--platform", "-p", type=str, default="all", help="平台名称")
+
+    auth_subparsers.add_parser("list", help="列出所有已保存凭证的平台")
+
     args = parser.parse_args()
 
     if args.version:
@@ -67,6 +86,8 @@ def main() -> None:
         _cmd_init_db(args)
     elif args.command == "list-platforms":
         _cmd_list_platforms(args)
+    elif args.command == "auth":
+        asyncio.run(_cmd_auth(args))
     else:
         parser.print_help()
 
@@ -109,6 +130,31 @@ def _cmd_init_db(args: argparse.Namespace) -> None:
 def _cmd_list_platforms(args: argparse.Namespace) -> None:
     print("支持的平台：")
     print("  - xiaohongshu (小红书)")
+
+
+async def _cmd_auth(args: argparse.Namespace) -> None:
+    from sucrawler.cli.auth import auth_login, auth_logout, auth_status, auth_list
+
+    if not args.auth_command:
+        print("请指定认证子命令: login, logout, status, list")
+        print("示例:")
+        print("  uv run sucrawler auth login --platform xiaohongshu")
+        print("  uv run sucrawler auth status")
+        sys.exit(1)
+
+    if args.auth_command == "login":
+        exit_code = await auth_login(args)
+    elif args.auth_command == "logout":
+        exit_code = await auth_logout(args)
+    elif args.auth_command == "status":
+        exit_code = await auth_status(args)
+    elif args.auth_command == "list":
+        exit_code = await auth_list(args)
+    else:
+        print(f"未知的认证子命令: {args.auth_command}")
+        exit_code = 1
+
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

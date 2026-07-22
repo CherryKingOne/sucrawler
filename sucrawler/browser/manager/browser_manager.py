@@ -8,6 +8,8 @@ from typing import Any, Optional
 
 from loguru import logger
 
+from sucrawler.auth.base import BaseAuthenticator
+from sucrawler.auth.credential_store import CredentialStore
 from sucrawler.browser.cdp.connection import CDPConnection
 from sucrawler.browser.cdp.target import TargetManager
 from sucrawler.browser.cookie import CookieManager
@@ -34,6 +36,8 @@ class BrowserManager:
         self._browser_info: Optional[BrowserInfo] = None
         self._started: bool = False
         self._cleanup_registered: bool = False
+        self._authenticator: Optional[BaseAuthenticator] = None
+        self._credential_store: Optional[CredentialStore] = None
 
     @property
     def config(self) -> BrowserConfig:
@@ -67,6 +71,48 @@ class BrowserManager:
     def is_started(self) -> bool:
         return self._started
 
+    @property
+    def authenticator(self) -> Optional[BaseAuthenticator]:
+        return self._authenticator
+
+    @property
+    def credential_store(self) -> Optional[CredentialStore]:
+        return self._credential_store
+
+    def set_authenticator(self, authenticator: BaseAuthenticator) -> None:
+        self._authenticator = authenticator
+        if self._playwright_context and self._authenticator:
+            self._authenticator.attach_browser(
+                page=None,
+                context=self._playwright_context,
+            )
+        logger.info("[BrowserManager] Authenticator set")
+
+    async def ensure_logged_in(self, platform: str = "") -> bool:
+        if not self._authenticator:
+            logger.warning("[BrowserManager] No authenticator set")
+            return False
+
+        if self._playwright_context:
+            page = await self.new_page()
+            try:
+                self._authenticator.attach_browser(page, self._playwright_context)
+                result = await self._authenticator.ensure_logged_in()
+                if result and self._config.save_credentials:
+                    await self._save_current_credential()
+                return result
+            finally:
+                await page.close()
+
+        return await self._authenticator.ensure_logged_in()
+
+    async def _save_current_credential(self) -> None:
+        if not self._authenticator or not self._credential_store:
+            return
+        if self._authenticator.credential:
+            self._credential_store.save(self._authenticator.credential)
+            logger.info("[BrowserManager] Credential saved")
+
     async def start(self) -> None:
         if self._started:
             logger.warning("[BrowserManager] Browser already started")
@@ -82,6 +128,7 @@ class BrowserManager:
 
             await self._init_playwright()
             await self._init_cookie_manager()
+            self._init_credential_store()
             self._register_cleanup()
             self._started = True
             logger.info("[BrowserManager] Browser started successfully")
@@ -258,6 +305,20 @@ class BrowserManager:
                     logger.info("[BrowserManager] Loaded saved login state")
                 except Exception as e:
                     logger.warning(f"[BrowserManager] Failed to load state: {e}")
+
+    def _init_credential_store(self) -> None:
+        credential_dir = self._config.credential_dir
+        if not credential_dir:
+            credential_dir = os.path.join(
+                os.path.expanduser("~"),
+                ".sucrawler",
+                "credentials",
+            )
+        try:
+            self._credential_store = CredentialStore(base_dir=credential_dir)
+            logger.info(f"[BrowserManager] Credential store initialized at {credential_dir}")
+        except Exception as e:
+            logger.warning(f"[BrowserManager] Failed to init credential store: {e}")
 
     async def _cleanup_playwright(self) -> None:
         if self._playwright_context:

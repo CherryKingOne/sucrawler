@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 BrowserType = Literal["chrome", "edge", "chromium"]
 BrowserMode = Literal["standard", "cdp"]
+LoginType = Literal["qrcode", "phone", "cookie"]
 
 
 class BrowserConfig(BaseModel):
@@ -27,6 +28,11 @@ class BrowserConfig(BaseModel):
     viewport_width: int = 1920
     viewport_height: int = 1080
     proxy: str = ""
+    auto_login: bool = True
+    login_type: LoginType = "qrcode"
+    credential_dir: str = ""
+    login_timeout: int = 300
+    save_credentials: bool = True
 
 
 class BrowserInfo(BaseModel):
