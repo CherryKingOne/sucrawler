@@ -239,19 +239,9 @@ class XHSBrowserSpider:
             bm = await self._ensure_browser()
             page = await bm.new_page()
 
-            user_profile_url = f"{self.config.base_url}/user/profile/{user_id}"
-            await page.goto(user_profile_url, wait_until="domcontentloaded")
-            await asyncio.sleep(2)
-
-            notes_data = await self._fetch_all_notes_via_api(
+            notes_data = await self._capture_notes_via_scroll(
                 page, user_id, max_count
             )
-
-            if not notes_data:
-                logger.warning("API fetch failed or returned empty, trying scroll capture")
-                notes_data = await self._capture_notes_via_scroll(
-                    page, user_id, max_count
-                )
 
             await page.close()
 
@@ -272,73 +262,6 @@ class XHSBrowserSpider:
 
         if max_count > 0:
             return all_notes[:max_count]
-        return all_notes
-
-    async def _fetch_all_notes_via_api(
-        self,
-        page: Any,
-        user_id: str,
-        max_count: int = 0,
-    ) -> list[dict[str, Any]]:
-        fetch_all = max_count <= 0
-        api_url = f"{self.config.api_url}/user/profile/notes"
-        params = {"user_id": user_id, "cursor": "", "page_size": 20}
-        all_notes: list[dict[str, Any]] = []
-        seen_ids: set[str] = set()
-        consecutive_empty = 0
-        max_consecutive_empty = 3
-        max_retries = 3
-        page_num = 0
-
-        while True:
-            page_num += 1
-            result = None
-            for retry in range(max_retries):
-                result = await self._fetch_api_via_page(page, api_url, params)
-                if result is not None:
-                    break
-                logger.warning(f"Page {page_num} fetch failed, retry {retry + 1}/{max_retries}")
-                await asyncio.sleep(1 * (retry + 1))
-
-            if result is None:
-                logger.error(f"Page {page_num} failed after {max_retries} retries, stopping")
-                break
-
-            page_notes = self._extract_notes_from_result(result)
-            cursor = self._get_next_cursor(result)
-
-            new_notes: list[dict[str, Any]] = []
-            for note in page_notes:
-                note_id = note.get("note_id") or note.get("id")
-                if note_id and note_id not in seen_ids:
-                    seen_ids.add(note_id)
-                    new_notes.append(note)
-
-            all_notes.extend(new_notes)
-            logger.info(
-                f"Page {page_num}: got {len(new_notes)} new notes "
-                f"(total: {len(all_notes)}, cursor: {cursor[:20] if cursor else 'empty'}...)"
-            )
-
-            if not new_notes:
-                consecutive_empty += 1
-                if consecutive_empty >= max_consecutive_empty:
-                    logger.info(f"No new notes for {consecutive_empty} consecutive pages, reached end")
-                    break
-            else:
-                consecutive_empty = 0
-
-            if not fetch_all and len(all_notes) >= max_count:
-                logger.info(f"Reached max_count: {max_count}")
-                break
-
-            if not cursor:
-                logger.info("No more cursor, reached end of notes")
-                break
-
-            params["cursor"] = cursor
-            await asyncio.sleep(1)
-
         return all_notes
 
     def _extract_notes_from_result(self, result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -363,28 +286,30 @@ class XHSBrowserSpider:
         fetch_all = max_count <= 0
         notes_data: list[dict[str, Any]] = []
         seen_ids: set[str] = set()
+        last_scroll_height = 0
         try:
             user_profile_url = f"{self.config.base_url}/user/profile/{user_id}"
-            async with RequestCapture(page, url_pattern="user/profile/notes") as capture:
+            async with RequestCapture(page, url_pattern="user_posted") as capture:
                 await page.goto(user_profile_url, wait_until="domcontentloaded")
                 await asyncio.sleep(3)
 
-                max_scrolls = 50 if fetch_all else max(10, (max_count // 20) + 5)
+                max_scrolls = 200 if fetch_all else max(20, (max_count // 20) + 10)
                 consecutive_no_new = 0
-                max_consecutive_no_new = 5
-                last_count = 0
+                max_consecutive_no_new = 8
+                scroll_pause_time = 2
 
                 for scroll_idx in range(max_scrolls):
                     try:
+                        current_scroll_height = await page.evaluate("document.body.scrollHeight")
                         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     except Exception:
                         break
 
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(scroll_pause_time)
 
-                    current_notes: list[dict[str, Any]] = []
+                    new_this_scroll = 0
                     for captured in capture.captured_responses:
-                        if "user/profile/notes" in captured["url"] and captured["status"] == 200:
+                        if "user_posted" in captured["url"] and captured["status"] == 200:
                             try:
                                 body = captured.get("body")
                                 if body and isinstance(body, str):
@@ -394,17 +319,14 @@ class XHSBrowserSpider:
                                         if isinstance(inner, dict):
                                             page_notes = inner.get("notes", [])
                                             if isinstance(page_notes, list):
-                                                current_notes.extend(page_notes)
+                                                for note in page_notes:
+                                                    note_id = note.get("note_id") or note.get("id")
+                                                    if note_id and note_id not in seen_ids:
+                                                        seen_ids.add(note_id)
+                                                        notes_data.append(note)
+                                                        new_this_scroll += 1
                             except (json.JSONDecodeError, KeyError):
                                 continue
-
-                    new_this_scroll = 0
-                    for note in current_notes:
-                        note_id = note.get("note_id") or note.get("id")
-                        if note_id and note_id not in seen_ids:
-                            seen_ids.add(note_id)
-                            notes_data.append(note)
-                            new_this_scroll += 1
 
                     logger.info(
                         f"Scroll {scroll_idx + 1}/{max_scrolls}: "
@@ -418,12 +340,23 @@ class XHSBrowserSpider:
                     if new_this_scroll == 0:
                         consecutive_no_new += 1
                         if consecutive_no_new >= max_consecutive_no_new:
-                            logger.info(f"No new notes for {consecutive_no_new} scrolls, reached end")
+                            logger.info(
+                                f"No new notes for {consecutive_no_new} scrolls, reached end"
+                            )
                             break
                     else:
                         consecutive_no_new = 0
 
-                    last_count = len(notes_data)
+                    try:
+                        new_scroll_height = await page.evaluate("document.body.scrollHeight")
+                        if new_scroll_height == last_scroll_height and new_this_scroll == 0:
+                            consecutive_no_new += 2
+                            if consecutive_no_new >= max_consecutive_no_new:
+                                logger.info("Page height stopped changing, reached end")
+                                break
+                        last_scroll_height = new_scroll_height
+                    except Exception:
+                        pass
         except Exception as e:
             logger.debug(f"Scroll capture method failed: {e}")
 
