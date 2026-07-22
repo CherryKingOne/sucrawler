@@ -89,6 +89,9 @@ cp .env.example .env
 ### 运行爬虫
 
 ```bash
+# 使用 uv run 启动（推荐）
+uv run sucrawler run --platform xiaohongshu --keyword "美食"
+
 # 命令行方式
 python scripts/run_spider.py \
   --platform xiaohongshu \
@@ -100,9 +103,41 @@ python scripts/run_spider.py \
 python -m sucrawler.main run --platform xiaohongshu
 ```
 
+### 爬取博主主页
+
+一键爬取指定平台博主的主页信息和笔记列表：
+
+```bash
+# 通过博主主页 URL 爬取
+uv run sucrawler crawl-user --url "https://www.xiaohongshu.com/user/profile/xxxxxxxxxx"
+
+# 通过用户 ID 爬取
+uv run sucrawler crawl-user --user-id xxxxxxxxxx
+
+# 指定爬取笔记数量
+uv run sucrawler crawl-user --url "https://www.xiaohongshu.com/user/profile/xxxxxxxxxx" --max-notes 50
+
+# 输出到 JSON 文件
+uv run sucrawler crawl-user --url "https://www.xiaohongshu.com/user/profile/xxxxxxxxxx" --output ./output/bohrer.json
+
+# 指定 Cookie
+uv run sucrawler crawl-user --url "https://www.xiaohongshu.com/user/profile/xxxxxxxxxx" --cookie "your_cookie_here"
+```
+
+支持从以下 URL 格式自动提取用户 ID：
+- `https://www.xiaohongshu.com/user/profile/{user_id}`
+- `https://www.xiaohongshu.com/user/{user_id}`
+
 ### 启动 API 服务
 
 ```bash
+# 使用 uv run 启动（推荐）
+uv run sucrawler serve --reload
+
+# 指定端口
+uv run sucrawler serve --port 8080 --reload
+
+# 或使用 uvicorn
 uvicorn api.app:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -307,22 +342,40 @@ uv run pytest --cov=sucrawler
 
 ## 命令行工具
 
+所有命令均可通过 `uv run sucrawler` 调用：
+
 ```bash
 # 查看版本
-python -m sucrawler.main --version
+uv run sucrawler --version
+
+# 查看帮助
+uv run sucrawler --help
 
 # 列出支持的平台
-python -m sucrawler.main list-platforms
+uv run sucrawler list-platforms
 
-# 运行爬虫
-python -m sucrawler.main run --platform xiaohongshu
+# 运行爬虫任务
+uv run sucrawler run --platform xiaohongshu --keyword "美食"
+
+# 爬取博主主页
+uv run sucrawler crawl-user --url "https://www.xiaohongshu.com/user/profile/xxxxxxxxxx"
 
 # 启动 API 服务
-python -m sucrawler.main serve
+uv run sucrawler serve --reload
 
 # 初始化数据库
-python -m sucrawler.main init-db
+uv run sucrawler init-db
 ```
+
+### 命令详解
+
+| 命令 | 说明 | 常用参数 |
+|------|------|----------|
+| `run` | 运行通用爬虫任务 | `--platform` 平台, `--url` URL, `--keyword` 关键词 |
+| `crawl-user` | 爬取博主主页 | `--url` 主页URL, `--user-id` 用户ID, `--max-notes` 笔记数量, `--output` 输出文件, `--cookie` Cookie |
+| `serve` | 启动 API 服务 | `--host` 地址, `--port` 端口, `--reload` 自动重载 |
+| `list-platforms` | 列出支持的平台 | - |
+| `init-db` | 初始化数据库 | - |
 
 ## 许可证
 
