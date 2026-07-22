@@ -226,7 +226,7 @@ class BiliBrowserSpider:
             bm = await self._ensure_browser()
             page = await bm.new_page()
 
-            videos_data = await self._capture_videos_via_scroll(
+            videos_data = await self._capture_videos_via_pagination(
                 page, mid, max_count
             )
 
@@ -251,7 +251,7 @@ class BiliBrowserSpider:
             return all_videos[:max_count]
         return all_videos
 
-    async def _capture_videos_via_scroll(
+    async def _capture_videos_via_pagination(
         self,
         page: Any,
         mid: str,
@@ -260,28 +260,22 @@ class BiliBrowserSpider:
         fetch_all = max_count <= 0
         videos_data: list[dict[str, Any]] = []
         seen_ids: set[str] = set()
-        last_scroll_height = 0
+        current_page = 1
+
         try:
             video_url = f"{self.config.space_url}/{mid}/video"
             async with RequestCapture(page, url_pattern="arc/search") as capture:
                 await page.goto(video_url, wait_until="domcontentloaded")
                 await asyncio.sleep(3)
 
-                max_scrolls = 200 if fetch_all else max(20, (max_count // 30) + 10)
-                consecutive_no_new = 0
-                max_consecutive_no_new = 8
-                scroll_pause_time = 2
+                max_pages = 50 if fetch_all else max(1, (max_count // 30) + 2)
+                max_retries = 3
+                page_pause_time = 2
 
-                for scroll_idx in range(max_scrolls):
-                    try:
-                        current_scroll_height = await page.evaluate("document.body.scrollHeight")
-                        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    except Exception:
-                        break
+                while True:
+                    new_on_page = 0
+                    page_videos: list[dict[str, Any]] = []
 
-                    await asyncio.sleep(scroll_pause_time)
-
-                    new_this_scroll = 0
                     for captured in capture.captured_responses:
                         if "arc/search" in captured["url"] and captured["status"] == 200:
                             try:
@@ -297,44 +291,121 @@ class BiliBrowserSpider:
                                                     bvid = video.get("bvid")
                                                     if bvid and bvid not in seen_ids:
                                                         seen_ids.add(bvid)
-                                                        videos_data.append(video)
-                                                        new_this_scroll += 1
+                                                        page_videos.append(video)
+                                                        new_on_page += 1
                             except (json.JSONDecodeError, KeyError):
                                 continue
 
+                    videos_data.extend(page_videos)
                     logger.info(
-                        f"Scroll {scroll_idx + 1}/{max_scrolls}: "
-                        f"{new_this_scroll} new videos (total: {len(videos_data)})"
+                        f"Page {current_page}: "
+                        f"{new_on_page} new videos (total: {len(videos_data)})"
                     )
 
                     if not fetch_all and len(videos_data) >= max_count:
                         logger.info(f"Reached max_count: {max_count}")
                         break
 
-                    if new_this_scroll == 0:
-                        consecutive_no_new += 1
-                        if consecutive_no_new >= max_consecutive_no_new:
-                            logger.info(
-                                f"No new videos for {consecutive_no_new} scrolls, reached end"
-                            )
-                            break
-                    else:
-                        consecutive_no_new = 0
+                    if not fetch_all and current_page >= max_pages:
+                        logger.info(f"Reached max_pages: {max_pages}")
+                        break
 
-                    try:
-                        new_scroll_height = await page.evaluate("document.body.scrollHeight")
-                        if new_scroll_height == last_scroll_height and new_this_scroll == 0:
-                            consecutive_no_new += 2
-                            if consecutive_no_new >= max_consecutive_no_new:
-                                logger.info("Page height stopped changing, reached end")
+                    has_next = await self._has_next_page(page)
+                    if not has_next:
+                        logger.info("No next page, reached last page")
+                        break
+
+                    clicked = await self._click_next_page(page)
+                    if not clicked:
+                        logger.warning("Failed to click next page")
+                        break
+
+                    current_page += 1
+                    await asyncio.sleep(page_pause_time)
+
+                    retry_count = 0
+                    while retry_count < max_retries:
+                        new_data_found = False
+                        for captured in capture.captured_responses:
+                            if "arc/search" in captured["url"] and captured["status"] == 200:
+                                try:
+                                    body = captured.get("body")
+                                    if body and isinstance(body, str):
+                                        data = json.loads(body)
+                                        if data.get("code") == 0:
+                                            inner = data.get("data", {})
+                                            if isinstance(inner, dict):
+                                                vlist = inner.get("list", {}).get("vlist", [])
+                                                if isinstance(vlist, list):
+                                                    for video in vlist:
+                                                        bvid = video.get("bvid")
+                                                        if bvid and bvid not in seen_ids:
+                                                            new_data_found = True
+                                                            break
+                                except (json.JSONDecodeError, KeyError):
+                                    continue
+                            if new_data_found:
                                 break
-                        last_scroll_height = new_scroll_height
-                    except Exception:
-                        pass
+
+                        if new_data_found:
+                            break
+
+                        retry_count += 1
+                        logger.debug(
+                            f"Waiting for page {current_page} data... "
+                            f"retry {retry_count}/{max_retries}"
+                        )
+                        await asyncio.sleep(page_pause_time)
+
+                    if retry_count >= max_retries:
+                        logger.warning(
+                            f"Page {current_page} data not loaded after {max_retries} retries"
+                        )
+                        break
+
         except Exception as e:
-            logger.debug(f"Scroll capture method failed: {e}")
+            logger.error(f"Pagination capture method error: {e}")
 
         return videos_data
+
+    async def _has_next_page(self, page: Any) -> bool:
+        try:
+            result = await page.evaluate("""
+                () => {
+                    const nextBtn = document.querySelector('.vui_pagenation--btn-side:last-child');
+                    if (!nextBtn) return false;
+                    if (nextBtn.disabled) return false;
+                    const text = nextBtn.textContent || '';
+                    return text.includes('下一页');
+                }
+            """)
+            return bool(result)
+        except Exception as e:
+            logger.debug(f"Error checking next page: {e}")
+            return False
+
+    async def _click_next_page(self, page: Any) -> bool:
+        try:
+            result = await page.evaluate("""
+                () => {
+                    const btns = document.querySelectorAll('.vui_pagenation--btn-side');
+                    let nextBtn = null;
+                    for (const btn of btns) {
+                        const text = btn.textContent || '';
+                        if (text.includes('下一页')) {
+                            nextBtn = btn;
+                            break;
+                        }
+                    }
+                    if (!nextBtn || nextBtn.disabled) return false;
+                    nextBtn.click();
+                    return true;
+                }
+            """)
+            return bool(result)
+        except Exception as e:
+            logger.debug(f"Error clicking next page: {e}")
+            return False
 
     async def close(self) -> None:
         if self._browser is not None:
