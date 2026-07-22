@@ -117,9 +117,12 @@ class XHSAuthenticator(BaseAuthenticator):
             return False
 
         check_interval = 2
+        qrcode_refresh_interval = 60
         max_checks = self.timeout // check_interval
+        last_qrcode_time = 0
+        checks_since_refresh = 0
 
-        for _ in range(max_checks):
+        for i in range(max_checks):
             try:
                 user_element = await self._page.query_selector(self.LOGIN_CHECK_SELECTOR)
                 if user_element:
@@ -128,6 +131,14 @@ class XHSAuthenticator(BaseAuthenticator):
                 cookies = await self._get_cookies()
                 if self._has_web_session(cookies):
                     return True
+
+                checks_since_refresh += 1
+                if checks_since_refresh * check_interval >= qrcode_refresh_interval:
+                    checks_since_refresh = 0
+                    qrcode_data = await self._extract_qrcode()
+                    if qrcode_data:
+                        QRCodeUtils.display_qrcode_terminal(qrcode_data)
+                        logger.info("QR code refreshed, please scan to login")
 
             except Exception:
                 pass

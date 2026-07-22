@@ -6,8 +6,10 @@ from typing import Any
 
 from loguru import logger
 
+from sucrawler.auth.types import LoginType
 from sucrawler.browser.manager.browser_manager import BrowserManager
 from sucrawler.browser.network.request_capture import RequestCapture
+from sucrawler.platforms.xiaohongshu.auth.xhs_login import XHSAuthenticator
 from sucrawler.platforms.xiaohongshu.config import XHSConfig
 from sucrawler.platforms.xiaohongshu.extractor import XHSExtractor
 from sucrawler.platforms.xiaohongshu.models.note import XHSNoteItem
@@ -19,6 +21,8 @@ class XHSBrowserSpider:
         self.config = config
         self.extractor = XHSExtractor()
         self._browser: BrowserManager | None = None
+        self._authenticator: XHSAuthenticator | None = None
+        self._login_checked: bool = False
 
     async def _ensure_browser(self) -> BrowserManager:
         if self._browser is None:
@@ -27,8 +31,55 @@ class XHSBrowserSpider:
             )
             self._browser = BrowserManager(browser_config)
             await self._browser.start()
+
+            self._authenticator = XHSAuthenticator(
+                login_type=LoginType.QRCODE,
+                timeout=300,
+                cookie_str=self.config.cookie or "",
+                credential_store=self._browser.credential_store,
+            )
+            self._browser.set_authenticator(self._authenticator)
+
             logger.info("XHS browser spider started")
         return self._browser
+
+    async def _ensure_logged_in(self) -> bool:
+        if self._login_checked:
+            return True
+
+        bm = await self._ensure_browser()
+        if not self._authenticator:
+            logger.warning("No authenticator available")
+            return False
+
+        page = await bm.new_page()
+        try:
+            self._authenticator.attach_browser(page, bm.playwright_context)
+
+            if await self._authenticator.check_login_status():
+                logger.info("Already logged in")
+                self._login_checked = True
+                return True
+
+            logger.info("Not logged in, starting login flow...")
+            print("=" * 50)
+            print("需要登录小红书账号")
+            print("请使用小红书 App 扫描终端中的二维码登录")
+            print("=" * 50)
+
+            success = await self._authenticator.login()
+            if success:
+                logger.info("Login successful")
+                self._login_checked = True
+                if self._authenticator.credential and bm.credential_store:
+                    bm.credential_store.save(self._authenticator.credential)
+                    logger.info("Credential saved")
+                return True
+            else:
+                logger.error("Login failed")
+                return False
+        finally:
+            await page.close()
 
     async def _fetch_api_via_page(
         self,
@@ -82,6 +133,10 @@ class XHSBrowserSpider:
     async def crawl_user_info(self, user_id: str) -> XHSUserItem | None:
         logger.info(f"Crawling user info (browser mode): {user_id}")
         try:
+            if not await self._ensure_logged_in():
+                logger.error("Failed to login, cannot crawl user info")
+                return None
+
             bm = await self._ensure_browser()
             page = await bm.new_page()
 
@@ -147,6 +202,10 @@ class XHSBrowserSpider:
         all_notes: list[XHSNoteItem] = []
 
         try:
+            if not await self._ensure_logged_in():
+                logger.error("Failed to login, cannot crawl user notes")
+                return all_notes
+
             bm = await self._ensure_browser()
             page = await bm.new_page()
 
