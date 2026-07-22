@@ -14,7 +14,7 @@ from sucrawler.platforms.bilibili.spiders.user_spider import BiliUserSpider
 from sucrawler.platforms.xiaohongshu.config import XHSConfig
 from sucrawler.platforms.xiaohongshu.spiders.browser_spider import XHSBrowserSpider
 from sucrawler.platforms.xiaohongshu.spiders.user_spider import XHSUserSpider
-from sucrawler.utils.url_parser import extract_user_id_from_url
+from sucrawler.utils.url_parser import detect_platform_from_url, extract_user_id_from_url
 
 
 def build_crawl_user_parser(
@@ -107,6 +107,7 @@ async def crawl_user(args: argparse.Namespace) -> int:
         return 1
 
     user_id = args.user_id
+    platform = args.platform
     if args.url:
         extracted = extract_user_id_from_url(args.url)
         if not extracted:
@@ -115,9 +116,16 @@ async def crawl_user(args: argparse.Namespace) -> int:
         user_id = extracted
         logger.info(f"从 URL 提取用户 ID: {user_id}")
 
+        detected_platform = detect_platform_from_url(args.url)
+        if detected_platform:
+            if platform == "xiaohongshu" and detected_platform != "xiaohongshu":
+                platform = detected_platform
+                logger.info(f"从 URL 自动识别平台: {platform}")
+            elif platform != detected_platform:
+                logger.warning(f"指定平台 {platform} 与 URL 识别平台 {detected_platform} 不一致，使用指定平台: {platform}")
+
     load_config(env=args.env)
 
-    platform = args.platform
     spider = None
     user_info_field_map = {
         "xiaohongshu": {

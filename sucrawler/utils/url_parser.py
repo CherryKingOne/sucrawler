@@ -19,3 +19,13 @@ def extract_user_id_from_url(url: str) -> str | None:
         if match:
             return match.group(1)
     return None
+
+
+def detect_platform_from_url(url: str) -> str | None:
+    cleaned = url.strip().strip('"').strip("'").lower()
+
+    if "bilibili.com" in cleaned:
+        return "bilibili"
+    if "xiaohongshu.com" in cleaned or "xhslink.com" in cleaned:
+        return "xiaohongshu"
+    return None
