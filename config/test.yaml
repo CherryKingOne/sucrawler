@@ -1,0 +1,10 @@
+app:
+  log_level: WARNING
+
+storage:
+  default_backend: sqlite
+  backends:
+    sqlite:
+      type: sqlite
+      name: sqlite
+      db_path: ./data/test.db

@@ -1,0 +1,47 @@
+app:
+  name: sucrawler
+  log_level: INFO
+
+scheduler:
+  type: memory
+  max_tasks: 1000
+
+downloader:
+  type: httpx
+  timeout: 30
+  max_concurrent: 10
+  retry:
+    max_attempts: 3
+    backoff_factor: 2.0
+
+middleware:
+  retry:
+    enabled: true
+  rate_limit:
+    enabled: true
+    requests_per_second: 10.0
+  user_agent:
+    enabled: true
+    rotate: true
+  proxy:
+    enabled: false
+  log:
+    enabled: true
+  stats:
+    enabled: true
+
+storage:
+  default_backend: default
+  backends:
+    default:
+      type: local
+      name: default
+      base_path: ./data
+
+platforms:
+  xiaohongshu:
+    enabled: true
+    base_url: https://www.xiaohongshu.com
+    rate_limit:
+      enabled: true
+      requests_per_second: 5.0

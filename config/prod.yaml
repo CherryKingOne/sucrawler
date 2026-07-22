@@ -1,0 +1,27 @@
+app:
+  log_level: INFO
+
+scheduler:
+  type: redis
+  max_tasks: 10000
+
+downloader:
+  max_concurrent: 50
+
+storage:
+  default_backend: mysql
+  backends:
+    mysql:
+      type: mysql
+      name: mysql
+      host: localhost
+      port: 3306
+      database: sucrawler
+      user: root
+      password: ""
+    redis:
+      type: redis
+      name: redis
+      host: localhost
+      port: 6379
+      db: 0
