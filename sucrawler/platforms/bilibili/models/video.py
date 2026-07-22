@@ -22,5 +22,10 @@ class BiliVideoItem(Item):
     author: str = ""
     tags: list[str] = []
     tname: str = ""
+    # 视频详情页补充字段
+    cid: int = 0
+    video_urls: list[str] = []
+    audio_urls: list[str] = []
+    accept_quality: list[int] = []
+    accept_description: list[str] = []
     platform: str = "bilibili"
-

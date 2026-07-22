@@ -260,9 +260,9 @@ async def crawl_user(args: argparse.Namespace) -> int:
             result: dict[str, Any] = {
                 "platform": platform,
                 "user_id": user_id,
-                "user_info": user_info.model_dump() if user_info else None,
+                "user_info": user_info.model_dump(mode="json") if user_info else None,
                 "count": len(items),
-                "items": [item.model_dump() for item in items],
+                "items": [item.model_dump(mode="json") for item in items],
             }
             output_path = Path(args.output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -338,7 +338,7 @@ def _save_result_csv(
 
     first = items[0]
     if hasattr(first, "model_dump"):
-        rows = [item.model_dump() for item in items]
+        rows = [item.model_dump(mode="json") for item in items]
     elif isinstance(first, dict):
         rows = list(items)
     else:
@@ -385,10 +385,10 @@ def save_crawl_result(
 
     result: dict[str, Any] = {
         "platform": platform,
-        "user_info": user_info.model_dump() if hasattr(user_info, "model_dump") else user_info,
+        "user_info": user_info.model_dump(mode="json") if hasattr(user_info, "model_dump") else user_info,
         "count": len(items),
         "items": [
-            item.model_dump() if hasattr(item, "model_dump") else item
+            item.model_dump(mode="json") if hasattr(item, "model_dump") else item
             for item in items
         ],
     }

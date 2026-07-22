@@ -208,6 +208,80 @@ class BiliBrowserSpider:
 
         return None
 
+    async def crawl_video_detail(self, bvid: str) -> dict[str, Any] | None:
+        """访问单个视频页面，解析详情页 HTML 获取标签、统计、下载链接等。"""
+        video_url = f"{self.config.base_url}/video/{bvid}"
+        logger.info(f"Fetching video detail page: {video_url}")
+        try:
+            bm = await self._ensure_browser()
+            page = await bm.new_page()
+            await page.goto(video_url, wait_until="domcontentloaded")
+            await asyncio.sleep(2)
+            html = await page.content()
+            await page.close()
+
+            detail = self.extractor.parser.parse_video_detail_page(html)
+            logger.info(
+                f"Video {bvid}: {len(detail.get('tags', []))} tags, "
+                f"{len(detail.get('video_urls', []))} video streams, "
+                f"{len(detail.get('audio_urls', []))} audio streams"
+            )
+            return detail
+        except Exception as e:
+            logger.error(f"Error fetching video detail for {bvid}: {e}")
+            return None
+
+    async def _enrich_videos_with_detail(
+        self,
+        videos: list[BiliVideoItem],
+        max_detail_count: int = 0,
+    ) -> list[BiliVideoItem]:
+        """为每个视频补充详情页数据（标签、统计、下载链接）。"""
+        fetch_all = max_detail_count <= 0
+        total = len(videos) if fetch_all else min(max_detail_count, len(videos))
+        logger.info(f"Enriching {total}/{len(videos)} videos with detail page data...")
+
+        for i, video in enumerate(videos[:total]):
+            if not video.bvid:
+                continue
+            detail = await self.crawl_video_detail(video.bvid)
+            if detail:
+                # 补充标签（列表 API 不提供）
+                if detail.get("tags"):
+                    video.tags = detail["tags"]
+                # 用详情页的更准确统计数据覆盖
+                if detail.get("play", 0) > 0:
+                    video.play = detail["play"]
+                if detail.get("like", 0) > 0:
+                    video.like = detail["like"]
+                if detail.get("coin", 0) > 0:
+                    video.coin = detail["coin"]
+                if detail.get("collect", 0) > 0:
+                    video.collect = detail["collect"]
+                if detail.get("share", 0) > 0:
+                    video.share = detail["share"]
+                if detail.get("danmaku", 0) > 0:
+                    video.danmaku = detail["danmaku"]
+                if detail.get("comment", 0) > 0:
+                    video.comment = detail["comment"]
+                if detail.get("duration", 0) > 0:
+                    video.duration = detail["duration"]
+                if detail.get("pubdate", 0) > 0:
+                    video.pubdate = detail["pubdate"]
+                # 下载链接
+                video.video_urls = detail.get("video_urls", [])
+                video.audio_urls = detail.get("audio_urls", [])
+                video.accept_quality = detail.get("accept_quality", [])
+                video.accept_description = detail.get("accept_description", [])
+                # 补充描述（列表 API 有时为空）
+                if detail.get("description") and not video.description:
+                    video.description = detail["description"]
+
+            logger.info(f"Enriched {i + 1}/{total}: {video.bvid}")
+            await asyncio.sleep(1)  # 适度延迟
+
+        return videos
+
     async def crawl_user_videos(
         self,
         mid: str,
@@ -243,6 +317,11 @@ class BiliBrowserSpider:
             )
             all_videos.extend(extracted)
             logger.info(f"Got {len(all_videos)} videos via browser mode")
+
+            # 为每个视频补充详情页数据（标签、下载链接等）
+            all_videos = await self._enrich_videos_with_detail(
+                all_videos, max_count,
+            )
 
         except Exception as e:
             logger.error(f"Error crawling user videos (browser mode): {e}")

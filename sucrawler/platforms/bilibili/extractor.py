@@ -65,6 +65,11 @@ class BiliExtractor(BaseExtractorImpl):
                 author=parsed.get("author", ""),
                 tags=parsed.get("tags", []),
                 tname=parsed.get("tname", ""),
+                cid=parsed.get("cid", 0),
+                video_urls=parsed.get("video_urls", []),
+                audio_urls=parsed.get("audio_urls", []),
+                accept_quality=parsed.get("accept_quality", []),
+                accept_description=parsed.get("accept_description", []),
                 raw_data=parsed.get("raw_data"),
             )
             videos.append(video)
