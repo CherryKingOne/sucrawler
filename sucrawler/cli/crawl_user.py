@@ -10,6 +10,7 @@ from loguru import logger
 
 from sucrawler.config.loader import load_config
 from sucrawler.platforms.xiaohongshu.config import XHSConfig
+from sucrawler.platforms.xiaohongshu.spiders.browser_spider import XHSBrowserSpider
 from sucrawler.platforms.xiaohongshu.spiders.user_spider import XHSUserSpider
 from sucrawler.utils.url_parser import extract_user_id_from_url
 
@@ -64,6 +65,30 @@ def build_crawl_user_parser(
         default="dev",
         help="环境 (dev, test, prod)",
     )
+    parser.add_argument(
+        "--browser",
+        action="store_true",
+        default=False,
+        help="使用浏览器模式 (CDP) 爬取，反检测能力更强",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        default=False,
+        help="浏览器无头模式（不显示窗口），仅在 --browser 模式下有效",
+    )
+    parser.add_argument(
+        "--connect-existing",
+        action="store_true",
+        default=False,
+        help="连接已有浏览器（需先以调试模式启动 Chrome），便于先登录再爬取",
+    )
+    parser.add_argument(
+        "--debug-port",
+        type=int,
+        default=9222,
+        help="已有浏览器的调试端口 (默认: 9222)",
+    )
     return parser
 
 
@@ -74,6 +99,8 @@ async def crawl_user(args: argparse.Namespace) -> int:
         print("示例：")
         print("  uv run sucrawler crawl-user --url https://www.xiaohongshu.com/user/profile/xxxxxxxx")
         print("  uv run sucrawler crawl-user --user-id xxxxxxxx")
+        print("  uv run sucrawler crawl-user --user-id xxxxxxxx --browser")
+        print("  uv run sucrawler crawl-user --user-id xxxxxxxx --browser --connect-existing")
         return 1
 
     user_id = args.user_id
@@ -91,10 +118,23 @@ async def crawl_user(args: argparse.Namespace) -> int:
     if args.cookie:
         xhs_config.cookie = args.cookie
 
-    if not xhs_config.cookie:
-        logger.warning("未设置 Cookie，部分接口可能无法正常访问")
+    if args.browser:
+        xhs_config.use_browser = True
+        browser_updates = {"enabled": True, "mode": "cdp", "headless": args.headless}
+        if args.connect_existing:
+            browser_updates["cdp_connect_existing"] = True
+            browser_updates["debug_port"] = args.debug_port
+        xhs_config.browser = xhs_config.browser.model_copy(update=browser_updates)
 
-    spider = XHSUserSpider(xhs_config)
+    if not xhs_config.use_browser and not xhs_config.cookie:
+        logger.warning("未设置 Cookie，部分接口可能无法正常访问")
+        logger.info("提示：可使用 --browser 参数启用浏览器模式，绕过签名验证")
+
+    if xhs_config.use_browser:
+        spider = XHSBrowserSpider(xhs_config)
+        logger.info("使用浏览器 (CDP) 模式爬取")
+    else:
+        spider = XHSUserSpider(xhs_config)
 
     try:
         print(f"正在爬取博主信息，用户 ID: {user_id}")

@@ -219,6 +219,27 @@ class PlatformConfig(BaseModel):
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
 
 
+class BrowserConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = False
+    mode: Literal["standard", "cdp"] = "standard"
+    browser_type: Literal["chrome", "edge", "chromium"] = "chrome"
+    cdp_connect_existing: bool = False
+    debug_port: int = 9222
+    custom_browser_path: str = ""
+    headless: bool = False
+    user_data_dir: str = ""
+    save_login_state: bool = True
+    launch_timeout: int = 60
+    auto_close: bool = True
+    stealth_script_path: str = ""
+    user_agent: str = ""
+    viewport_width: int = 1920
+    viewport_height: int = 1080
+    proxy: str = ""
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="ignore")
 
@@ -227,4 +248,5 @@ class Settings(BaseModel):
     downloader: DownloaderConfig = Field(default_factory=DownloaderConfig)
     middleware: MiddlewareConfig = Field(default_factory=MiddlewareConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    browser: BrowserConfig = Field(default_factory=BrowserConfig)
     platforms: dict[str, PlatformConfig] = Field(default_factory=dict)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from sucrawler.browser.types import BrowserConfig
+
 
 class XHSConfig(BaseModel):
     base_url: str = "https://www.xiaohongshu.com"
@@ -9,6 +11,8 @@ class XHSConfig(BaseModel):
     rate_limit: float = 1.0
     cookie: str = ""
     sign_key: str = ""
+    use_browser: bool = False
+    browser: BrowserConfig = Field(default_factory=BrowserConfig)
     user_agent: str = Field(
         default=(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
