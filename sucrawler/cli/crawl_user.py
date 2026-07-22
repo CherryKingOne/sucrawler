@@ -44,8 +44,8 @@ def build_crawl_user_parser(
         "--max-notes",
         "-n",
         type=int,
-        default=20,
-        help="爬取的笔记数量上限 (默认: 20)",
+        default=0,
+        help="爬取的笔记数量上限 (默认: 0 = 全部)",
     )
     parser.add_argument(
         "--output",
