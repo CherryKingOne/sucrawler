@@ -128,8 +128,17 @@ def _cmd_init_db(args: argparse.Namespace) -> None:
 
 
 def _cmd_list_platforms(args: argparse.Namespace) -> None:
+    from sucrawler.platforms import PlatformRegistry
+
+    platforms = PlatformRegistry.list_platforms()
+    platform_names = {
+        "xiaohongshu": "小红书",
+        "bilibili": "哔哩哔哩",
+    }
     print("支持的平台：")
-    print("  - xiaohongshu (小红书)")
+    for p in platforms:
+        name = platform_names.get(p, p)
+        print(f"  - {p} ({name})")
 
 
 async def _cmd_auth(args: argparse.Namespace) -> None:
