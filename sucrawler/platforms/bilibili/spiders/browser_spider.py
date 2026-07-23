@@ -209,7 +209,7 @@ class BiliBrowserSpider:
         return None
 
     async def crawl_video_detail(self, bvid: str) -> dict[str, Any] | None:
-        """访问单个视频页面，解析详情页 HTML 获取标签、统计、下载链接等。"""
+        """访问单个视频页面，解析详情页 HTML 获取标签、统计数据等。"""
         video_url = f"{self.config.base_url}/video/{bvid}"
         logger.info(f"Fetching video detail page: {video_url}")
         try:
@@ -220,11 +220,10 @@ class BiliBrowserSpider:
             html = await page.content()
             await page.close()
 
-            detail = self.extractor.parser.parse_video_detail_page(html)
+            detail = self.extractor.parser.parse_video_detail_page(html, bvid)
             logger.info(
                 f"Video {bvid}: {len(detail.get('tags', []))} tags, "
-                f"{len(detail.get('video_urls', []))} video streams, "
-                f"{len(detail.get('audio_urls', []))} audio streams"
+                f"video_url: {detail.get('video_url', '')}"
             )
             return detail
         except Exception as e:
@@ -236,7 +235,7 @@ class BiliBrowserSpider:
         videos: list[BiliVideoItem],
         max_detail_count: int = 0,
     ) -> list[BiliVideoItem]:
-        """为每个视频补充详情页数据（标签、统计、下载链接）。"""
+        """为每个视频补充详情页数据（标签、统计、视频页面 URL）。"""
         fetch_all = max_detail_count <= 0
         total = len(videos) if fetch_all else min(max_detail_count, len(videos))
         logger.info(f"Enriching {total}/{len(videos)} videos with detail page data...")
@@ -269,7 +268,7 @@ class BiliBrowserSpider:
                 if detail.get("pubdate", 0) > 0:
                     video.pubdate = detail["pubdate"]
                 # 下载链接
-                video.video_urls = detail.get("video_urls", [])
+                video.video_url = detail.get("video_url", "")
                 video.audio_urls = detail.get("audio_urls", [])
                 video.accept_quality = detail.get("accept_quality", [])
                 video.accept_description = detail.get("accept_description", [])

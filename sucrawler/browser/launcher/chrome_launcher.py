@@ -30,25 +30,31 @@ class ChromeLauncher(BaseBrowserLauncher):
         if not os.path.isfile(options.browser_path):
             raise BrowserNotFoundError(f"Browser not found at: {options.browser_path}")
 
+        # 检查是否有已存在的 Chrome 进程使用相同的 user-data-dir
+        if options.user_data_dir:
+            self._kill_existing_instance(options.user_data_dir)
+
         args = self._build_args(options)
 
         logger.info(f"[ChromeLauncher] Launching browser: {options.browser_path}")
         logger.debug(f"[ChromeLauncher] Debug port: {options.debug_port}")
         logger.debug(f"[ChromeLauncher] Headless: {options.headless}")
+        if options.user_data_dir:
+            logger.debug(f"[ChromeLauncher] User data dir: {options.user_data_dir}")
 
         try:
             if self.system == "Windows":
                 process = subprocess.Popen(
                     args,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
                 )
             else:
                 process = subprocess.Popen(
                     args,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     preexec_fn=os.setsid,
                 )
 
@@ -57,6 +63,53 @@ class ChromeLauncher(BaseBrowserLauncher):
 
         except OSError as e:
             raise BrowserLaunchError(f"Failed to launch browser: {e}") from e
+
+    def _kill_existing_instance(self, user_data_dir: str) -> None:
+        """终止使用相同 user-data-dir 的已有 Chrome 进程，避免新进程被忽略。"""
+        # macOS 和 Linux 的锁文件路径
+        lock_patterns = [
+            os.path.join(user_data_dir, "SingletonLock"),
+            os.path.join(user_data_dir, "SingletonCookie"),
+            os.path.join(user_data_dir, "SingletonSocket"),
+        ]
+
+        lock_exists = any(os.path.exists(p) for p in lock_patterns)
+        if not lock_exists:
+            return
+
+        logger.warning(
+            f"[ChromeLauncher] Detected existing browser using user-data-dir: {user_data_dir}"
+        )
+
+        # 尝试通过 ps 找到并终止使用该 user-data-dir 的 Chrome 进程
+        try:
+            result = subprocess.run(
+                ["ps", "aux"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+            )
+            lines = result.stdout.splitlines()
+            killed = 0
+            for line in lines:
+                if "Google Chrome" in line or "chrome" in line.lower():
+                    if user_data_dir in line:
+                        parts = line.split()
+                        if len(parts) > 1:
+                            try:
+                                pid = int(parts[1])
+                                os.kill(pid, signal.SIGTERM)
+                                logger.info(f"[ChromeLauncher] Terminated stale Chrome PID {pid}")
+                                killed += 1
+                            except (ProcessLookupError, ValueError, PermissionError):
+                                pass
+            if killed > 0:
+                import time
+                time.sleep(2)
+                logger.info(f"[ChromeLauncher] Cleaned up {killed} stale Chrome process(es)")
+        except Exception as e:
+            logger.debug(f"[ChromeLauncher] Error cleaning up existing instance: {e}")
 
     def cleanup(self) -> None:
         if not self._process:
@@ -124,7 +177,6 @@ class ChromeLauncher(BaseBrowserLauncher):
         args: list[str] = [
             options.browser_path,
             f"--remote-debugging-port={options.debug_port}",
-            "--remote-debugging-address=0.0.0.0",
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-background-timer-throttling",

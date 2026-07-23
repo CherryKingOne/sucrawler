@@ -188,15 +188,25 @@ class BiliParser(BaseParserImpl):
                 for tag in tag_list
             ]
 
+            # 视频页面 URL（可在浏览器中直接访问查看）
+            bvid_str = result.get("bvid", "")
+            if bvid_str:
+                result["video_url"] = f"https://www.bilibili.com/video/{bvid_str}"
+
         result["raw_data"] = data
         return result
 
-    def parse_video_detail_page(self, html: str) -> dict[str, Any]:
-        """解析 Bilibili 视频详情页 HTML，提取标签、统计数据、视频下载链接等。"""
+    def parse_video_detail_page(self, html: str, bvid: str = "") -> dict[str, Any]:
+        """解析 Bilibili 视频详情页 HTML，提取标签、统计数据等。
+
+        Args:
+            html: 视频详情页 HTML 内容
+            bvid: 视频 BV 号，用于构造浏览器可访问的视频页面 URL
+        """
         result: dict[str, Any] = {"tags": [], "play": 0, "like": 0, "coin": 0,
                                   "collect": 0, "share": 0, "danmaku": 0,
                                   "comment": 0, "duration": 0, "pubdate": 0,
-                                  "video_urls": [], "audio_urls": []}
+                                  "video_url": "", "audio_urls": []}
 
         # 1. 从 <meta itemprop="keywords"> 提取标签
         keywords_match = re.search(
@@ -272,35 +282,9 @@ class BiliParser(BaseParserImpl):
             except (json.JSONDecodeError, KeyError, TypeError) as e:
                 logger.debug(f"Failed to parse ld+json: {e}")
 
-        # 4. 从 window.__playinfo__ 提取视频/音频下载链接
-        playinfo_match = re.search(
-            r'window\.__playinfo__\s*=\s*(\{.*?\})\s*</script>',
-            html, re.DOTALL,
-        )
-        if playinfo_match:
-            try:
-                import json
-                playinfo = json.loads(playinfo_match.group(1))
-                dash = playinfo.get("data", {}).get("dash", {})
-                # 视频流（只提取 URL 字符串）
-                for video_stream in dash.get("video", []):
-                    url = video_stream.get("baseUrl") or video_stream.get("base_url", "")
-                    if url:
-                        result["video_urls"].append(url)
-                # 音频流（只提取 URL 字符串）
-                for audio_stream in dash.get("audio", []):
-                    url = audio_stream.get("baseUrl") or audio_stream.get("base_url", "")
-                    if url:
-                        result["audio_urls"].append(url)
-                # accept_quality
-                result["accept_quality"] = playinfo.get("data", {}).get(
-                    "accept_quality", [],
-                )
-                result["accept_description"] = playinfo.get("data", {}).get(
-                    "accept_description", [],
-                )
-            except (json.JSONDecodeError, KeyError, TypeError) as e:
-                logger.debug(f"Failed to parse __playinfo__: {e}")
+        # 4. 构造浏览器可访问的视频页面 URL
+        if bvid:
+            result["video_url"] = f"https://www.bilibili.com/video/{bvid}"
 
         # 5. 从 <meta itemprop="uploadDate"> 提取发布日期（备用）
         if not result["pubdate"]:

@@ -66,7 +66,7 @@ class BiliExtractor(BaseExtractorImpl):
                 tags=parsed.get("tags", []),
                 tname=parsed.get("tname", ""),
                 cid=parsed.get("cid", 0),
-                video_urls=parsed.get("video_urls", []),
+                video_url=parsed.get("video_url", ""),
                 audio_urls=parsed.get("audio_urls", []),
                 accept_quality=parsed.get("accept_quality", []),
                 accept_description=parsed.get("accept_description", []),

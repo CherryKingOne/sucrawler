@@ -49,6 +49,7 @@ def main() -> None:
     crawl_user_parser.add_argument("--connect-existing", action="store_true", default=False, help="连接已有浏览器")
     crawl_user_parser.add_argument("--debug-port", type=int, default=9222, help="已有浏览器调试端口")
     crawl_user_parser.add_argument("--no-save", action="store_true", default=False, help="不保存结果到文件")
+    crawl_user_parser.add_argument("--download", type=str, nargs="?", const="all", default=None, choices=["video", "image", "all"], help="下载媒体: video/image/all，不跟值默认all")
     crawl_user_parser.add_argument("--env", "-e", type=str, default="dev", help="环境 (dev, test, prod)")
 
     subparsers.add_parser("init-db", help="初始化数据库")

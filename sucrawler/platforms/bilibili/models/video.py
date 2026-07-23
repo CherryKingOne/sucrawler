@@ -24,7 +24,8 @@ class BiliVideoItem(Item):
     tname: str = ""
     # 视频详情页补充字段
     cid: int = 0
-    video_urls: list[str] = []
+    # 浏览器可访问的视频页面 URL（如 https://www.bilibili.com/video/BV1xxx）
+    video_url: str = ""
     audio_urls: list[str] = []
     accept_quality: list[int] = []
     accept_description: list[str] = []

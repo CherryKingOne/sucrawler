@@ -107,6 +107,16 @@ def build_crawl_user_parser(
         default=False,
         help="不保存结果到文件（默认保存到 output/ 目录）",
     )
+    parser.add_argument(
+        "--download",
+        type=str,
+        nargs="?",
+        const="all",
+        default=None,
+        choices=["video", "image", "all"],
+        help="下载媒体文件: video(仅视频) / image(仅封面) / all(全部)，"
+        "不跟值时默认 all（如 --download video），不指定则不下载",
+    )
     return parser
 
 
@@ -258,12 +268,18 @@ async def crawl_user(args: argparse.Namespace) -> int:
                 logger.error(f"保存结果失败: {e}")
                 output_dir = None
 
-        # 后台下载视频和封面图片
-        if output_dir and items:
+        # 按需下载视频和/或封面图片（需 --download 参数启用）
+        if args.download and output_dir and items:
             try:
                 print("-" * 50)
-                print(f"开始下载视频和封面图片到: {output_dir}/video 和 {output_dir}/image")
-                await download_media(items, output_dir, platform)
+                download_type = args.download
+                targets = []
+                if download_type in ("video", "all"):
+                    targets.append("视频")
+                if download_type in ("image", "all"):
+                    targets.append("封面图片")
+                print(f"开始下载{'和'.join(targets)}到: {output_dir}")
+                await download_media(items, output_dir, platform, download_type=download_type)
                 print(f"媒体文件下载完成")
             except Exception as e:
                 logger.error(f"媒体下载失败: {e}")

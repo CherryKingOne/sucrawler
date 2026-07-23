@@ -209,6 +209,27 @@ class BrowserManager:
 
         launcher.launch(options)
 
+        # 检查浏览器进程是否立即退出（通常是因为已有同 profile 的 Chrome 实例在运行）
+        import asyncio as _asyncio
+
+        await _asyncio.sleep(1)
+        process = launcher.process
+        if process and process.poll() is not None:
+            stderr_output = ""
+            try:
+                stderr_output = process.stderr.read().decode("utf-8", errors="ignore")[:500] if process.stderr else ""
+            except Exception:
+                pass
+            logger.error(f"[BrowserManager] Browser process exited immediately (code={process.returncode})")
+            if stderr_output:
+                logger.error(f"[BrowserManager] Chrome stderr: {stderr_output}")
+            raise BrowserLaunchError(
+                "Browser process exited immediately. This usually means another Chrome instance "
+                "is already running with the same user-data-dir. "
+                "Try closing all Chrome windows first, or use --connect-existing to connect "
+                "to an existing browser with debugging enabled."
+            )
+
         self._cdp = CDPConnection(debug_port=self._debug_port)
 
         ready = await self._cdp.wait_until_ready(timeout=self._config.launch_timeout)

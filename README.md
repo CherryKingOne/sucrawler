@@ -135,7 +135,7 @@ uv run sucrawler crawl-user --url "https://www.xiaohongshu.com/user/profile/xxxx
 
 #### 哔哩哔哩 (Bilibili) UP主爬取
 
-B 站平台采用传统 HTTP 请求方式，不依赖 CDP（Chrome DevTools Protocol），直接调用 B 站官方 API 获取数据。
+B 站平台默认使用浏览器模式 (CDP) 爬取，支持下载视频和封面图片。详细使用方法请参考 [Bilibili 使用指南](docs/bilibili-guide.md)。
 
 ```bash
 # 通过 UP 主主页 URL 爬取（自动识别 B 站平台）
@@ -144,15 +144,17 @@ uv run sucrawler crawl-user --url "https://space.bilibili.com/12345678"
 # 通过用户 ID (mid) 爬取（需指定平台）
 uv run sucrawler crawl-user --platform bilibili --user-id 12345678
 
-# 指定爬取视频数量（0 表示全部爬取）
-uv run sucrawler crawl-user --url "https://space.bilibili.com/12345678" --max-notes 100
+# 同时下载视频和封面图片
+uv run sucrawler crawl-user --url "https://space.bilibili.com/12345678" --download
 
-# 输出到 JSON 文件
-uv run sucrawler crawl-user --url "https://space.bilibili.com/12345678" --output ./output/bili_user.json
+# 仅下载视频
+uv run sucrawler crawl-user --url "https://space.bilibili.com/12345678" --download video
 
-# 指定 Cookie（可选，用于获取更高的访问权限）
-uv run sucrawler crawl-user --url "https://space.bilibili.com/12345678" --cookie "your_cookie_here"
+# 仅下载封面图片
+uv run sucrawler crawl-user --url "https://space.bilibili.com/12345678" --download image
 ```
+
+> 更多用法（浏览器模式、无头模式、连接已有浏览器等）请查看 [Bilibili 使用指南](docs/bilibili-guide.md)
 
 支持的 B 站 URL 格式：
 - `https://space.bilibili.com/{mid}`
@@ -269,16 +271,9 @@ platforms:
 
 ### 哔哩哔哩 (bilibili)
 
-内置哔哩哔哩 (B 站) 平台实现，采用传统 HTTP 请求方式，不依赖 CDP（Chrome DevTools Protocol），直接调用 B 站官方 API。
+内置哔哩哔哩 (B 站) 平台实现，默认使用浏览器模式 (CDP) 爬取，支持 UP 主信息、视频列表、视频详情、关键词搜索、评论爬取等功能。
 
-支持功能：
-
-- **UP主信息** - 获取 UP 主基本信息（昵称、头像、签名、粉丝数、关注数、等级等）
-- **视频列表** - 获取 UP 主发布的全部视频（支持分页遍历）
-- **视频详情** - 获取单个视频的详细信息（播放量、弹幕、点赞、投币、收藏、分享等）
-- **视频标签** - 获取视频的标签信息
-- **关键词搜索** - 按关键词搜索视频
-- **评论爬取** - 获取视频评论列表
+> 详细使用方法和配置请参考 [Bilibili 使用指南](docs/bilibili-guide.md)
 
 配置示例：
 
@@ -294,8 +289,6 @@ platforms:
     rate_limit: 1.0
     user_agent: "Mozilla/5.0 ..."
 ```
-
-> **说明**：B 站平台使用纯 HTTP 请求，无需启动浏览器。Cookie 和 SESSDATA 为可选配置，配置后可获得更高的访问权限和更完整的数据。
 
 ## API 接口
 
@@ -435,7 +428,7 @@ uv run sucrawler init-db
 | 命令 | 说明 | 常用参数 |
 |------|------|----------|
 | `run` | 运行通用爬虫任务 | `--platform` 平台 (xiaohongshu/bilibili), `--url` URL, `--keyword` 关键词 |
-| `crawl-user` | 爬取博主/UP主主页 | `--platform` 平台 (xiaohongshu/bilibili), `--url` 主页URL, `--user-id` 用户ID, `--max-notes` 作品数量, `--output` 输出文件, `--cookie` Cookie |
+| `crawl-user` | 爬取博主/UP主主页 | `--platform` 平台, `--url` 主页URL, `--user-id` 用户ID, `--max-notes` 数量, `--output` 输出文件, `--cookie` Cookie, `--download` 下载媒体(video/image/all), `--browser`/`--no-browser` 浏览器模式, `--headless` 无头模式 |
 | `serve` | 启动 API 服务 | `--host` 地址, `--port` 端口, `--reload` 自动重载 |
 | `list-platforms` | 列出支持的平台 | - |
 | `init-db` | 初始化数据库 | - |
